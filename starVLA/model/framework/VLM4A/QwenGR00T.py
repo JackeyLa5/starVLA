@@ -244,7 +244,8 @@ class Qwen_GR00T(baseframework):
 
         train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
-            batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+            target_size = tuple(int(v) for v in train_obs_image_size)
+            batch_images = resize_images(batch_images, target_size=target_size)
 
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)

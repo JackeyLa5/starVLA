@@ -168,16 +168,40 @@ from torchvision.ops import box_iou
 from PIL import Image
 
 
+def resize_with_padding(image: Image.Image, target_size=(224, 224), fill=(0, 0, 0)):
+    """Resize a PIL image with preserved aspect ratio and center padding."""
+    if not isinstance(image, Image.Image):
+        raise ValueError(f"Expected PIL.Image.Image, got {type(image)!r}")
+
+    target_w, target_h = (int(v) for v in target_size)
+    src_w, src_h = image.size
+    if src_w <= 0 or src_h <= 0 or target_w <= 0 or target_h <= 0:
+        raise ValueError(
+            f"Invalid image/target size: src={(src_w, src_h)}, target={(target_w, target_h)}"
+        )
+
+    scale = min(target_w / src_w, target_h / src_h)
+    resized_w = max(1, int(round(src_w * scale)))
+    resized_h = max(1, int(round(src_h * scale)))
+    resized = image.resize((resized_w, resized_h))
+
+    canvas = Image.new(image.mode, (target_w, target_h), fill)
+    offset_x = (target_w - resized_w) // 2
+    offset_y = (target_h - resized_h) // 2
+    canvas.paste(resized, (offset_x, offset_y))
+    return canvas
+
+
 def resize_images(images, target_size=(224, 224)):
     """
-    recursively resize all images in the nested list.
+    Recursively resize images with preserved aspect ratio and center padding.
 
     :param images: nested list of images or single image.
     :param target_size: target size (width, height) after resizing.
     :return: resized images list, keeping the original nested structure.
     """
     if isinstance(images, Image.Image):  # if it is a single PIL image
-        return images.resize(target_size)
+        return resize_with_padding(images, target_size=target_size)
     elif isinstance(images, list):  # if it is a list, recursively process each element
         return [resize_images(img, target_size) for img in images]
     else:

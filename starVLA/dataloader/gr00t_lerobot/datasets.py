@@ -71,6 +71,7 @@ EPSILON = 5e-4
 #  LeRobot v3.0 dataset file names 
 LE_ROBOT3_TASKS_FILENAME = "meta/tasks.parquet"
 LE_ROBOT3_EPISODE_FILENAME = "meta/episodes/*/*.parquet"
+LEROBOT_OLD_VERSIONS = {"v2.0", "v2.1"}
 
 
 def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
@@ -596,7 +597,7 @@ class LeRobotSingleDataset(Dataset):
         if not Path(dataset_path).exists():
             raise FileNotFoundError(f"Dataset path {dataset_path} does not exist")
         # indict letobot version
-        self._lerobot_version =  self.data_cfg.get("lerobot_version", "v2.0") #self._indict_lerobot_version(**kwargs)
+        self._lerobot_version = self.data_cfg.get("lerobot_version", "v2.0")
 
         self._action_mode = None
         self._action_mode_state_map = {}
@@ -900,7 +901,7 @@ class LeRobotSingleDataset(Dataset):
         """Get the trajectories in the dataset."""
         # Get trajectory lengths, IDs, and whitelist from dataset metadata
         # v2.0
-        if self._lerobot_version == "v2.0":
+        if self._lerobot_version in LEROBOT_OLD_VERSIONS:
             file_path = self.dataset_path / LE_ROBOT_EPISODE_FILENAME
             with open(file_path, "r") as f:
                 episode_metadata = [json.loads(line) for line in f]
@@ -1051,7 +1052,7 @@ class LeRobotSingleDataset(Dataset):
         # TODO why trajectory_length here, why not use data length?
         for trajectory_id, trajectory_length in tqdm(zip(self.trajectory_ids, self.trajectory_lengths), total=len(self.trajectory_ids), desc="Getting All Step"):
             try:
-                if self._lerobot_version == "v2.0":
+                if self._lerobot_version in LEROBOT_OLD_VERSIONS:
                     data = self.get_trajectory_data(trajectory_id)
                 elif self._lerobot_version == "v3.0":
                     data = self.get_trajectory_data_lerobot_v3(trajectory_id)
@@ -1307,7 +1308,7 @@ class LeRobotSingleDataset(Dataset):
 
     def _get_tasks(self) -> pd.DataFrame:
         """Get the tasks for the dataset."""
-        if self._lerobot_version == "v2.0":
+        if self._lerobot_version in LEROBOT_OLD_VERSIONS:
             tasks_path = self.dataset_path / LE_ROBOT_TASKS_FILENAME
             with open(tasks_path, "r") as f:
                 tasks = [json.loads(line) for line in f]
@@ -1381,8 +1382,7 @@ class LeRobotSingleDataset(Dataset):
         step_images = []
         for video_key in self.modality_keys["video"]:
             image = data[video_key][0]
-            image = Image.fromarray(image).resize((224, 224))
-            step_images.append(image)
+            step_images.append(Image.fromarray(image))
 
         language = data[self.modality_keys["language"][0]][0]
         action = []
@@ -1454,7 +1454,7 @@ class LeRobotSingleDataset(Dataset):
 
     def get_trajectory_data(self, trajectory_id: int) -> pd.DataFrame:
         """Get the data for a trajectory."""
-        if self._lerobot_version == "v2.0":
+        if self._lerobot_version in LEROBOT_OLD_VERSIONS:
         
             if self.curr_traj_id == trajectory_id and self.curr_traj_data is not None:
                 return self.curr_traj_data
@@ -1573,7 +1573,7 @@ class LeRobotSingleDataset(Dataset):
         original_key = self.lerobot_modality_meta.video[key].original_key
         if original_key is None:
             original_key = key
-        if self._lerobot_version == "v2.0":
+        if self._lerobot_version in LEROBOT_OLD_VERSIONS:
             video_filename = self.video_path_pattern.format(
                 episode_chunk=chunk_index, episode_index=trajectory_id, video_key=original_key
             )
@@ -1785,6 +1785,10 @@ class LeRobotSingleDataset(Dataset):
         original_key = subkey_meta.original_key
         if original_key is None:
             original_key = key
+        # Some LeRobot v2.x exports store the language link as task_index in parquet
+        # while modality.json still points annotation.human.task_description to "task".
+        if original_key not in self.curr_traj_data.columns and original_key == "task" and "task_index" in self.curr_traj_data.columns:
+            original_key = "task_index"
         for i in range(len(step_indices)): # 
             # task_indices.append(self.curr_traj_data[original_key][step_indices[i]].item())
             value = self.curr_traj_data[original_key].iloc[step_indices[i]] # TODO check v2.0 

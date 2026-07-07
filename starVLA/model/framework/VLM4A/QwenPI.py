@@ -272,7 +272,8 @@ class Qwen_PI(baseframework):
 
         train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
-            batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+            target_size = tuple(int(v) for v in train_obs_image_size)
+            batch_images = resize_images(batch_images, target_size=target_size)
 
         # Step 1: encode through QwenVL
         vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
@@ -294,7 +295,7 @@ class Qwen_PI(baseframework):
         normalized_actions = pred_actions.detach().cpu().numpy()
         return {"normalized_actions": normalized_actions}
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def predict_action_realtime(
         self,
         examples: Optional[List[dict]] = None,
@@ -334,7 +335,8 @@ class Qwen_PI(baseframework):
 
         train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
-            batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+            target_size = tuple(int(v) for v in train_obs_image_size)
+            batch_images = resize_images(batch_images, target_size=target_size)
 
         vl_embs_list, _ = self._encode_vl_hidden_states(batch_images, instructions)
         base_hidden = vl_embs_list[-1]

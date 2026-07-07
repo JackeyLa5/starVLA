@@ -17,6 +17,7 @@
 import av
 import cv2
 import numpy as np
+import warnings
 
 import torch  # noqa: F401 # isort: skip
 import torchvision  # noqa: F401 # isort: skip
@@ -46,9 +47,18 @@ def get_frames_by_indices(
     if video_backend == "decord":
         if not DECORD_AVAILABLE:
             raise ImportError("decord is not available.")
-        vr = decord.VideoReader(video_path, **video_backend_kwargs)
-        frames = vr.get_batch(indices)
-        return frames.asnumpy()
+        try:
+            vr = decord.VideoReader(video_path, **video_backend_kwargs)
+            frames = vr.get_batch(indices)
+            return frames.asnumpy()
+        except Exception as exc:
+            warnings.warn(f"decord failed for {video_path}: {exc}. Falling back to pyav.")
+            return get_frames_by_indices(
+                video_path,
+                indices,
+                video_backend="pyav",
+                video_backend_kwargs=video_backend_kwargs,
+            )
     elif video_backend == "torchcodec":
         if not TORCHCODEC_AVAILABLE:
             raise ImportError("torchcodec is not available.")
@@ -138,18 +148,27 @@ def get_frames_by_timestamps(
         np.ndarray: Frames at the specified timestamps.
     """
     if video_backend == "decord":
-        # For some GPUs, AV format data cannot be read
+        # For some AV1 videos, decord may fail to open the stream.
         if not DECORD_AVAILABLE:
             raise ImportError("decord is not available.")
-        vr = decord.VideoReader(video_path, **video_backend_kwargs)
-        num_frames = len(vr)
-        # Retrieve the timestamps for each frame in the video
-        frame_ts: np.ndarray = vr.get_frame_timestamp(range(num_frames))
-        # Map each requested timestamp to the closest frame index
-        # Only take the first element of the frame_ts array which corresponds to start_seconds
-        indices = np.abs(frame_ts[:, :1] - timestamps).argmin(axis=0)
-        frames = vr.get_batch(indices)
-        return frames.asnumpy()
+        try:
+            vr = decord.VideoReader(video_path, **video_backend_kwargs)
+            num_frames = len(vr)
+            # Retrieve the timestamps for each frame in the video
+            frame_ts: np.ndarray = vr.get_frame_timestamp(range(num_frames))
+            # Map each requested timestamp to the closest frame index
+            # Only take the first element of the frame_ts array which corresponds to start_seconds
+            indices = np.abs(frame_ts[:, :1] - timestamps).argmin(axis=0)
+            frames = vr.get_batch(indices)
+            return frames.asnumpy()
+        except Exception as exc:
+            warnings.warn(f"decord failed for {video_path}: {exc}. Falling back to pyav.")
+            return get_frames_by_timestamps(
+                video_path,
+                timestamps,
+                video_backend="pyav",
+                video_backend_kwargs=video_backend_kwargs,
+            )
     elif video_backend == "torchcodec":
         if not TORCHCODEC_AVAILABLE:
             raise ImportError("torchcodec is not available.")
